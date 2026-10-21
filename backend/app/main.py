@@ -2,9 +2,13 @@ import asyncio
 from contextlib import asynccontextmanager
 import hmac
 import os
+import re
 from pathlib import Path
-from fastapi import FastAPI, Depends, Header, HTTPException
+from fastapi import FastAPI, Depends, Header, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from starlette.concurrency import run_in_threadpool
+from .images import MAX_UPLOAD_BYTES, save_image
 from .models import StationInput, Volume, Play, Settings
 from .store import Store
 from .player import Player
@@ -18,6 +22,8 @@ def create_app(data_dir=None, demo=None):
     demo = os.getenv('PIRADIO_DEMO', '0') == '1' if demo is None else demo
     if len(token) < 32:
         raise RuntimeError('Nastavte PIRADIO_TOKEN na náhodný token o nejméně 32 znacích.')
+    images = data / 'images'
+    images.mkdir(exist_ok=True, mode=0o700)
     store = Store(data / 'radio.sqlite')
     settings = Settings(**store.get('settings', {}))
     settings.audio_device = os.getenv('PIRADIO_AUDIO_DEVICE', settings.audio_device)
@@ -53,6 +59,22 @@ def create_app(data_dir=None, demo=None):
             raise HTTPException(401, 'Neplatný ovládací token.')
 
     write = [Depends(auth)]
+
+    @app.post('/api/images', dependencies=write, status_code=201)
+    async def upload_image(request: Request):
+        content = bytearray()
+        async for chunk in request.stream():
+            if len(content) + len(chunk) > MAX_UPLOAD_BYTES:
+                raise HTTPException(413, 'Obrázek může mít nejvýše 5 MB.')
+            content.extend(chunk)
+        url = await run_in_threadpool(save_image, bytes(content), images)
+        return {'url': url}
+
+    @app.get('/media/{filename}')
+    async def image_file(filename: str):
+        if not re.fullmatch(r'[a-f0-9]{32}\.jpg', filename) or not (images / filename).is_file():
+            raise HTTPException(404, 'Obrázek neexistuje.')
+        return FileResponse(images / filename, media_type='image/jpeg')
 
     @app.get('/api/health')
     async def health():

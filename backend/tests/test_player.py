@@ -58,3 +58,20 @@ def test_recovery_stops_after_four_attempts(monkeypatch):
         assert p.state == 'error'
         await p.close()
     asyncio.run(scenario())
+
+
+def test_resolver_uses_project_python(monkeypatch):
+    import sys
+    async def scenario():
+        proc = AsyncMock()
+        proc.returncode = 0
+        proc.communicate.return_value = (b'https://test.googlevideo.com/audio\n', b'')
+        spawn = AsyncMock(return_value=proc)
+        monkeypatch.setattr('app.player.asyncio.create_subprocess_exec', spawn)
+        p = Player(False, Settings())
+        try:
+            await p.resolve('https://www.youtube.com/watch?v=abcdefghijk')
+            assert spawn.call_args.args[:3] == (sys.executable, '-m', 'yt_dlp')
+        finally:
+            await p.close()
+    asyncio.run(scenario())

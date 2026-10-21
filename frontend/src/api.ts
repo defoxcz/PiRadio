@@ -32,10 +32,18 @@ export async function api<T>(
   const response = await fetch(`/api${path}`, {
     method,
     headers: {
-      "Content-Type": "application/json",
+      "Content-Type":
+        data instanceof Blob
+          ? data.type || "application/octet-stream"
+          : "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: data === undefined ? undefined : JSON.stringify(data),
+    body:
+      data instanceof Blob
+        ? data
+        : data === undefined
+          ? undefined
+          : JSON.stringify(data),
     signal: AbortSignal.timeout(12000),
     cache: "no-store",
   });

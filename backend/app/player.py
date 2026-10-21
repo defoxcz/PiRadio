@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import sys
 import tempfile
 from pathlib import Path
 from urllib.parse import urlparse
@@ -53,7 +54,7 @@ class Player:
         raise RuntimeError('mpv IPC není dostupné')
 
     async def resolve(self, url):
-        proc = await asyncio.create_subprocess_exec('yt-dlp', '--ignore-config', '--js-runtimes', 'node', '--no-playlist', '--no-warnings', '--socket-timeout', '15', '--retries', '1', '-f', 'bestaudio/best', '--get-url', '--', url, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        proc = await asyncio.create_subprocess_exec(sys.executable, '-m', 'yt_dlp', '--ignore-config', '--js-runtimes', 'node', '--no-playlist', '--no-warnings', '--socket-timeout', '15', '--retries', '1', '-f', 'bestaudio/best', '--get-url', '--', url, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         try:
             out, err = await asyncio.wait_for(proc.communicate(), 40)
         except BaseException:

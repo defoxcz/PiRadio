@@ -22,15 +22,15 @@ npm --prefix frontend run build
 .venv/bin/uvicorn app.main:create_app --factory --app-dir backend --env-file .env.local --host 127.0.0.1 --port 8000
 ```
 
-Otevřete **http://127.0.0.1:8000**. Přímý vstup do vizuální ukázky: **http://127.0.0.1:8000/?demo=1**. V Nastavení vložte stejný token. Nová databáze nemá žádné stanice. Tlačítko **Otevřít vizuální demo** nabídne tři jasně označené ukázky bez URL a bez zvuku. Změny v této ukázce se neukládají; ukončením se vrátíte na backend.
+Otevřete **http://127.0.0.1:8000**. Při backendu s `PIRADIO_DEMO=1` lze otevřít vizuální ukázku: **http://127.0.0.1:8000/?demo=1**. V Nastavení vložte stejný token. Nová databáze nemá žádné stanice. Tlačítko **Otevřít vizuální demo** nabídne tři jasně označené ukázky bez URL a bez zvuku. Změny v této ukázce se neukládají; ukončením se vrátíte na backend.
 
-Backendový demo režim (`PIRADIO_DEMO=1`) ukládá skutečná data do SQLite, ale jen simuluje stav přehrávače. Každý takový stav nese `demo: true`. Nikdy neoznačuje simulaci za skutečné vysílání. Pro skutečný režim nastavte `PIRADIO_DEMO=0`, nainstalujte `mpv` (na Macu např. `brew install mpv`) a restartujte backend. macOS ukazuje své systémové metriky, nikoli metriky Raspberry Pi; teplota, Wi-Fi a throttling mohou být nedostupné.
+Backendový demo režim (`PIRADIO_DEMO=1`) ukládá skutečná data do SQLite, ale jen simuluje stav přehrávače. Každý takový stav nese `demo: true`. Nikdy neoznačuje simulaci za skutečné vysílání. Při `PIRADIO_DEMO=0` se parametr `?demo=1` ignoruje a odstraní z adresy, aby se omylem nespustila dočasná ukázka. Pro skutečný režim nastavte `PIRADIO_DEMO=0`, nainstalujte `mpv` (na Macu např. `brew install mpv`) a restartujte backend. macOS ukazuje své systémové metriky, nikoli metriky Raspberry Pi; teplota, Wi-Fi a throttling mohou být nedostupné.
 
 Pro vývoj spusťte backend podle výše uvedeného příkazu a ve druhém terminálu `npm --prefix frontend run dev`. Vite poskytne adresu a proxy `/api` na port 8000. Frontend nemá tajemství v bundlu a nevyžaduje CORS. Backend spouštějte jen v jednom workeru: stav mpv, zámky a historie jsou záměrně v paměti jednoho procesu.
 
 ## Co je implementované
 
-- Čtyři mobilní obrazovky: přehrávání, správa stanic, systém, nastavení. Vyhledávání, oblíbené, potvrzení smazání, zadávání obrázku, hlasitost a předchozí/další stanice.
+- Čtyři mobilní obrazovky: přehrávání, správa stanic, systém, nastavení. Vyhledávání, oblíbené, potvrzení smazání, nahrání obrázku ze souboru i zadání HTTPS adresy, hlasitost a předchozí/další stanice.
 - SQLite v `PIRADIO_DATA`, nezávisle na zdrojovém kódu. Zapisují se jen změny stanic, nastavení a poslední stanice; nikoli každá metrika nebo změna hlasitosti.
 - Dlouhodobý mpv proces s privátním Unix IPC socketem. yt-dlp získává vždy aktuální audio URL, nestahuje soubory. Povoleny jsou jen normalizované přímé YouTube HTTPS URL; resolver smí předat mpv jen HTTPS adresu na doméně `googlevideo.com`. Nepodporujeme playlisty, obecné weby ani odkazy na lokální soubory.
 - Resolver má limit 40 s, IPC 3 s, síť mpv 15 s. Maximálně 4 pokusy na jeden požadavek přehrát, s prodlevou 2/4/8 s. Po vyčerpání pokusů zůstane srozumitelná chyba; nový pokus spustí uživatel. Stav přehrávání se potvrzuje dostupným audio výstupem mpv. Podepsané stream URL ani tokeny se nelogují.
@@ -82,7 +82,7 @@ Pokud už používáte PipeWire, zjistěte zařízení přes `wpctl status`, vý
 
 Telefon připojte ke stejné domácí Wi-Fi a otevřete `http://raspberrypi.local:8000`; pokud mDNS nefunguje, použijte `http://IP_ADRESA_PI:8000`. V Nastavení vložte token. Zvuk vydává Raspberry Pi přes DAC; telefon žádné audio nepřehrává.
 
-Službu provozujte pouze v důvěryhodné LAN. Nenastavujte port forwarding ani veřejný port. Bearer token je nutný pro všechny změny, nastavení a systémové metriky; zdravotní stav, stanice a stav přehrávače jsou čitelné bez tokenu. Každý držitel tokenu má plné ovládání, neexistují uživatelské role. Token se drží v `sessionStorage` do ukončení relace; XSS nebo nedůvěryhodný software v prohlížeči ho mohou získat. Obrázky se načítají přímo na telefonu, server jejich URL nestahuje.
+Službu provozujte pouze v důvěryhodné LAN. Nenastavujte port forwarding ani veřejný port. Bearer token je nutný pro všechny změny, nastavení a systémové metriky; zdravotní stav, stanice a stav přehrávače jsou čitelné bez tokenu. Každý držitel tokenu má plné ovládání, neexistují uživatelské role. Token se drží v `sessionStorage` do ukončení relace; XSS nebo nedůvěryhodný software v prohlížeči ho mohou získat. Externí obrázky se načítají přímo na telefonu, server jejich URL nestahuje. Vlastní obrázek vyberete v **Stanice → Přidat / Upravit → Obrázek ze souboru** a potvrdíte tlačítkem **Uložit**. Podporované jsou JPG, PNG a WebP do 5 MB a 16 megapixelů. Server obrázek ověří, zmenší na nejvýše 1024×1024 px a uloží jako JPEG bez původních metadat v `PIRADIO_DATA/images`. Průhlednost dostane tmavé pozadí; animace se převede na první snímek. Obrázky jsou stejně jako seznam stanic veřejně čitelné v LAN. Zálohujte celý datový adresář včetně obrázků. Odebrání obrázku ze stanice soubor automaticky nemaže, protože jej mohou používat jiné stanice; nepřiřazené soubory zatím zůstávají na disku. Ve vizuálním demu obrázek zůstane pouze v paměti prohlížeče.
 
 HTTP v LAN nešifruje token ani provoz. Pro trvalé nasazení použijte HTTPS reverse proxy (např. Caddy) s doménou a certifikátem důvěryhodným pro Android, případně lokální CA, jejíž kořenový certifikát nainstalujete do telefonu. Pak backend přepněte na `127.0.0.1` a port zpřístupněte jen proxy. CORS není povolen; frontend a API mají stejný origin.
 
@@ -95,6 +95,8 @@ Interaktivní schéma a všechny modely jsou v `/docs`, OpenAPI v `/openapi.json
 | Metoda a cesta | Tělo / význam | Token |
 | --- | --- | --- |
 | GET `/api/health` | `{ok, demo}` | ne |
+| POST `/api/images` | binární tělo obrázku, vrací `{url}`; 201, limit 5 MB | ano |
+| GET `/media/{filename}` | ověřený nahraný JPEG; chybějící obrázek 404 | ne |
 | GET `/api/stations` | seznam stanic | ne |
 | POST `/api/stations` | `{name, url, image?, favorite?}`; 201 | ano |
 | PATCH `/api/stations/{id}` | kompletní editovatelná pole jako POST | ano |
@@ -120,6 +122,8 @@ bash -n deploy/install.sh
 ```
 
 Testy pokrývají odmítnutí nebezpečných URL, autentizaci, CRUD a perzistenci stanic, hlasitost, nastavení, nedostupné vypnutí, demo bez spouštění procesů, ukončení načítání a chování při chybě resolveru. Frontendová kontrola zahrnuje TypeScript a produkční build. Vizuální ověření v prohlížeči a na viewportu 360×800 nebylo v tomto prostředí dostupné; proveďte ho podle akceptačního postupu níže. `backend/requirements-lock.txt` zachycuje verze ověřené na vývojovém Macu; instalace na ARM používá přenositelné rozsahy z `requirements.txt` a správné wheel soubory pro platformu.
+
+Na vývojovém Macu je ověřeno skutečné spuštění mpv, Unix IPC, dekódování a postup přehrávání přes CoreAudio pomocí tichého testovacího WAV při hlasitosti 0; také zastavení a ukončení procesu. Tento test nepotvrzuje konkrétní YouTube vysílání ani slyšitelný zvuk.
 
 Skutečný YouTube stream, zvuk přes USB DAC, chování při ztrátě Wi-Fi, spotřeba paměti, automatický start po restartu Pi a oprávnění systemd je nutné ověřit na Raspberry Pi. Samotné unit testy ani stav `playing` nemohou potvrdit fyzický zvuk ze zesilovače. V prostředí vývoje není připojené Raspberry Pi ani DAC; žádné vysílání neprohlašujeme za ověřeně funkční.
 

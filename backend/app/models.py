@@ -42,11 +42,11 @@ class StationInput(BaseModel):
     @field_validator('image')
     @classmethod
     def image_valid(cls, v):
-        if not v:
+        if not v or re.fullmatch(r'/media/[a-f0-9]{32}\.jpg', v):
             return v
         u = urlparse(v)
         if u.scheme != 'https' or not u.hostname or u.username or u.password:
-            raise ValueError('Obrázek musí mít veřejnou HTTPS adresu.')
+            raise ValueError('Obrázek musí být nahraný soubor nebo HTTPS adresa.')
         return v
 
 

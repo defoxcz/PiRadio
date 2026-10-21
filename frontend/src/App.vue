@@ -28,6 +28,9 @@ const localDemo = ref(false),
   tokenInput = ref(""),
   editing = ref(false),
   editId = ref<string | null>(null);
+const imageFile = ref<File | null>(null);
+const imagePreview = ref("");
+const imageInputKey = ref(0);
 const form = ref({ name: "", url: "", image: "", favorite: false });
 const settings = ref<Settings>({
   default_volume: 45,
@@ -207,7 +210,38 @@ async function volume(event: Event) {
       });
   });
 }
+function clearImage() {
+  imageFile.value = null;
+  imagePreview.value = "";
+  form.value.image = "";
+  imageInputKey.value++;
+}
+async function chooseImage(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file) return;
+  if (file.size > 5 * 1024 * 1024) {
+    error.value = "Obrázek může mít nejvýše 5 MB.";
+    input.value = "";
+    return;
+  }
+  const selection = imageInputKey.value;
+  const reader = new FileReader();
+  reader.onload = () => {
+    if (selection !== imageInputKey.value) return;
+    imageFile.value = file;
+    imagePreview.value = String(reader.result);
+    error.value = "";
+  };
+  reader.onerror = () => {
+    error.value = "Soubor se nepodařilo přečíst. Zkuste jej vybrat znovu.";
+  };
+  reader.readAsDataURL(file);
+}
 function openEditor(station?: Station) {
+  imageFile.value = null;
+  imagePreview.value = "";
+  imageInputKey.value++;
   editId.value = station?.id || null;
   form.value = station
     ? {
@@ -221,6 +255,18 @@ function openEditor(station?: Station) {
 }
 async function saveStation() {
   await action(async () => {
+    if (imageFile.value) {
+      if (localDemo.value) form.value.image = imagePreview.value;
+      else {
+        const uploaded = await api<{ url: string }>(
+          "/images",
+          "POST",
+          imageFile.value,
+        );
+        form.value.image = uploaded.url;
+        imageFile.value = null;
+      }
+    }
     if (localDemo.value) {
       const id = editId.value || crypto.randomUUID();
       stations.value = [
@@ -286,11 +332,22 @@ async function restart() {
   });
 }
 let timer: ReturnType<typeof setInterval>;
-onMounted(() => {
-  if (new URLSearchParams(location.search).get("demo") === "1") {
-    preview();
-    loading.value = false;
-  } else void refresh();
+onMounted(async () => {
+  await refresh();
+  const address = new URL(location.href);
+  if (address.searchParams.get("demo") === "1") {
+    if (online.value && status.value.demo) preview();
+    else {
+      address.searchParams.delete("demo");
+      window.history.replaceState(
+        null,
+        "",
+        address.pathname + address.search + address.hash,
+      );
+      feedback.value =
+        "Skutečný provoz: stanice se ukládají na serveru a zvuk přehrává Mac nebo Raspberry Pi.";
+    }
+  }
   timer = setInterval(() => {
     if (!document.hidden && !busy.value) void refresh();
   }, 5000);
@@ -326,7 +383,7 @@ onUnmounted(() => clearInterval(timer));
           @click="refresh"
         >
           Zkusit znovu</button
-        ><button @click="preview">Prohlédnout demo</button>
+        ><button v-if="status.demo" @click="preview">Prohlédnout demo</button>
       </div>
       <div v-if="error" class="notice error" role="alert">
         {{ error
@@ -347,20 +404,23 @@ onUnmounted(() => clearInterval(timer));
         </div>
         <div class="artwork">
           <img
+            class="default-artwork"
+            src="/pi-radio-raspberry.png"
+            alt=""
+            width="1024"
+            height="1024"
+            fetchpriority="high"
+          />
+          <img
             v-if="current?.image"
+            :key="current.image"
             :src="current.image"
             alt=""
             @error="
               (e) => ((e.target as HTMLImageElement).style.display = 'none')
             "
           />
-          <div class="art-orbit one" />
-          <div class="art-orbit two" />
-          <div class="vinyl">
-            <div class="vinyl-center">π<span>RADIO</span></div>
-          </div>
-          <span class="art-label">SOUNDTRACK TO YOUR DAY</span
-          ><span class="live" :class="status.state">● {{ stateLabel }}</span>
+          <span class="live" :class="status.state">● {{ stateLabel }}</span>
         </div>
         <div class="track">
           <div>
@@ -485,7 +545,15 @@ onUnmounted(() => clearInterval(timer));
           :class="{ active: status.station_id === s.id }"
         >
           <button class="station-select" @click="play(s)">
-            <span class="station-art">♫</span
+            <span class="station-art"
+              ><img
+                v-if="s.image"
+                :src="s.image"
+                alt=""
+                @error="
+                  (e) => ((e.target as HTMLImageElement).style.display = 'none')
+                "
+              /><span v-else>♫</span></span
             ><span
               ><strong>{{ s.name }}</strong
               ><small>{{
@@ -527,10 +595,45 @@ onUnmounted(() => clearInterval(timer));
               type="url"
               placeholder="https://www.youtube.com/watch?v=…" /></label
           ><label
-            >Obrázek (volitelně)<input
+            >Obrázek ze souboru (volitelně)
+            <input
+              :key="imageInputKey"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              :disabled="busy"
+              @change="chooseImage"
+            />
+          </label>
+          <p class="muted">
+            JPG, PNG nebo WebP · nejvýše 5 MB a 16 megapixelů. Obrázek se
+            nahraje při uložení stanice.
+          </p>
+          <img
+            v-if="imagePreview || form.image"
+            class="image-preview"
+            :src="imagePreview || form.image"
+            alt="Náhled obrázku stanice"
+          />
+          <button
+            v-if="imagePreview || form.image"
+            type="button"
+            :disabled="busy"
+            @click="clearImage"
+          >
+            Odebrat obrázek
+          </button>
+          <label
+            v-if="
+              !imageFile &&
+              !form.image.startsWith('/media/') &&
+              !form.image.startsWith('data:')
+            "
+            >Nebo HTTPS adresa obrázku
+            <input
               v-model="form.image"
               type="url"
-              placeholder="https://…" /></label
+              placeholder="https://…"
+            /> </label
           ><label class="check"
             ><input v-model="form.favorite" type="checkbox" />Oblíbená
             stanice</label
@@ -701,7 +804,7 @@ onUnmounted(() => clearInterval(timer));
           </button>
           <p class="muted">Bezpečné systémové oprávnění není nastaveno.</p>
         </article>
-        <button v-if="!localDemo" class="wide" @click="preview">
+        <button v-if="!localDemo && status.demo" class="wide" @click="preview">
           Otevřít vizuální demo
         </button>
       </section>

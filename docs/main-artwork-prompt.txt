@@ -1,0 +1,11 @@
+Generated with built-in image_gen. Asset: frontend/public/pi-radio-raspberry.png
+
+Use case: stylized-concept
+Asset type: square cover illustration for the main player of Pi Radio, a Czech mobile music app controlling audio on Raspberry Pi 4.
+Primary request: evoke the connection between this radio application and a Raspberry Pi.
+Subject: a recognizable compact green Raspberry Pi style single-board computer, gold GPIO pin header, silver USB and Ethernet ports, connected by a short USB cable to a small charcoal USB audio DAC with a jack cable; elegant luminous mint-green audio waves arc around the board, suggesting wireless radio and music.
+Style/medium: premium tactile 3D editorial product illustration, finely detailed but restrained, sophisticated mobile music cover, not a schematic or dashboard.
+Scene/backdrop: matte deep charcoal navy #0b1215, subtle forest-green gradient with soft shadows and a faint green halo, no clutter.
+Composition/framing: square 1024x1024; three-quarter isometric board centered slightly below center, subject fully visible within central 75 percent with generous edges for mobile cropping; keep upper left corner quiet for a small LIVE status badge drawn separately by application.
+Lighting/mood: calm late-night listening, soft mint rim light #75edab, realistic metal and circuit-board material, luxurious subtle depth, strong silhouette readable at 320px.
+Constraints: no words, letters, numbers, typography, watermarks, UI controls or people; no oversized raspberry fruit; this is a music device, with hardware and audio signal as the focal point. Opaque background.

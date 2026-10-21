@@ -8,3 +8,6 @@ dist/
 data/
 *.sqlite*
 .DS_Store
+
+# Verzovaná kopie knihovny stanic; živá databáze v data/ zůstává lokální.
+!station-library/radio.sqlite

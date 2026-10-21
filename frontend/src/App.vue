@@ -522,6 +522,65 @@ onUnmounted(() => clearInterval(timer));
           </div>
           <button class="primary" @click="openEditor()">＋ Přidat</button>
         </div>
+        <form v-if="editing" class="panel editor" @submit.prevent="saveStation">
+          <h2>{{ editId ? "Upravit stanici" : "Nová stanice" }}</h2>
+          <label
+            >Název<input v-model="form.name" required maxlength="100" /></label
+          ><label
+            >YouTube URL<input
+              v-model="form.url"
+              required
+              type="url"
+              placeholder="https://www.youtube.com/watch?v=…" /></label
+          ><label
+            >Obrázek ze souboru (volitelně)
+            <input
+              :key="imageInputKey"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              :disabled="busy"
+              @change="chooseImage"
+            />
+          </label>
+          <p class="muted">
+            JPG, PNG nebo WebP · nejvýše 5 MB a 16 megapixelů. Obrázek se
+            nahraje při uložení stanice.
+          </p>
+          <img
+            v-if="imagePreview || form.image"
+            class="image-preview"
+            :src="imagePreview || form.image"
+            alt="Náhled obrázku stanice"
+          />
+          <button
+            v-if="imagePreview || form.image"
+            type="button"
+            :disabled="busy"
+            @click="clearImage"
+          >
+            Odebrat obrázek
+          </button>
+          <label
+            v-if="
+              !imageFile &&
+              !form.image.startsWith('/media/') &&
+              !form.image.startsWith('data:')
+            "
+            >Nebo HTTPS adresa obrázku
+            <input
+              v-model="form.image"
+              type="url"
+              placeholder="https://…"
+            /> </label
+          ><label class="check"
+            ><input v-model="form.favorite" type="checkbox" />Oblíbená
+            stanice</label
+          >
+          <div class="row">
+            <button class="primary" :disabled="busy">Uložit</button
+            ><button type="button" @click="editing = false">Zrušit</button>
+          </div>
+        </form>
         <label class="sr-only" for="search">Vyhledat stanici</label
         ><input
           id="search"
@@ -584,65 +643,6 @@ onUnmounted(() => clearInterval(timer));
           </h2>
           <p>Přidejte přímý HTTPS odkaz na skutečné YouTube vysílání.</p>
         </div>
-        <form v-if="editing" class="panel editor" @submit.prevent="saveStation">
-          <h2>{{ editId ? "Upravit stanici" : "Nová stanice" }}</h2>
-          <label
-            >Název<input v-model="form.name" required maxlength="100" /></label
-          ><label
-            >YouTube URL<input
-              v-model="form.url"
-              required
-              type="url"
-              placeholder="https://www.youtube.com/watch?v=…" /></label
-          ><label
-            >Obrázek ze souboru (volitelně)
-            <input
-              :key="imageInputKey"
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              :disabled="busy"
-              @change="chooseImage"
-            />
-          </label>
-          <p class="muted">
-            JPG, PNG nebo WebP · nejvýše 5 MB a 16 megapixelů. Obrázek se
-            nahraje při uložení stanice.
-          </p>
-          <img
-            v-if="imagePreview || form.image"
-            class="image-preview"
-            :src="imagePreview || form.image"
-            alt="Náhled obrázku stanice"
-          />
-          <button
-            v-if="imagePreview || form.image"
-            type="button"
-            :disabled="busy"
-            @click="clearImage"
-          >
-            Odebrat obrázek
-          </button>
-          <label
-            v-if="
-              !imageFile &&
-              !form.image.startsWith('/media/') &&
-              !form.image.startsWith('data:')
-            "
-            >Nebo HTTPS adresa obrázku
-            <input
-              v-model="form.image"
-              type="url"
-              placeholder="https://…"
-            /> </label
-          ><label class="check"
-            ><input v-model="form.favorite" type="checkbox" />Oblíbená
-            stanice</label
-          >
-          <div class="row">
-            <button class="primary" :disabled="busy">Uložit</button
-            ><button type="button" @click="editing = false">Zrušit</button>
-          </div>
-        </form>
       </section>
       <section v-else-if="tab === 'system'">
         <div class="heading">

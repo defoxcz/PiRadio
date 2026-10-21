@@ -128,3 +128,10 @@ Na vývojovém Macu je ověřeno skutečné spuštění mpv, Unix IPC, dekódov�
 Skutečný YouTube stream, zvuk přes USB DAC, chování při ztrátě Wi-Fi, spotřeba paměti, automatický start po restartu Pi a oprávnění systemd je nutné ověřit na Raspberry Pi. Samotné unit testy ani stav `playing` nemohou potvrdit fyzický zvuk ze zesilovače. V prostředí vývoje není připojené Raspberry Pi ani DAC; žádné vysílání neprohlašujeme za ověřeně funkční.
 
 Doporučený akceptační postup: nastavte skutečnou stanici → spusťte audio → zamkněte telefon na několik minut → ověřte pokračování → odpojte a obnovte Wi-Fi Pi → sledujte omezené pokusy a chybu/obnovu → restartujte Pi s autostartem → ověřte DAC a metriky → na Androidu 360×800 zkontrolujte navigaci a zvětšení textu. Vypnutí zůstává nedostupné, dokud nebude doplněn samostatný úzce oprávněný mechanismus.
+
+
+## Knihovna stanic v repozitáři
+
+`station-library/radio.sqlite` obsahuje konzistentní kopii aktuálních 6 stanic, oblíbených a poslední vybrané stanice. `station-library/images/` obsahuje jejich 6 nahraných obrázků. Token ani `.env.local` součástí nejsou. Živá databáze v `data/` zůstává mimo Git; další změny stanic se do verzované kopie nepřenesou automaticky.
+
+Pro první přenos na Mac zastavte backend a zkopírujte obsah `station-library/` do `data/`. Na Raspberry Pi po instalaci služby zastavte `piradio`, zkopírujte obsah `station-library/` do `/var/lib/piradio/`, nastavte vlastnictví na `piradio:piradio` a službu znovu spusťte. Kopírování přepíše stávající databázi; pokud už cílové zařízení obsahuje vlastní stanice, nejprve jeho data zazálohujte. Obrázky musí být ve složce `images/` vedle databáze. Token nastavte na každém zařízení zvlášť.

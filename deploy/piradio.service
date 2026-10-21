@@ -1,0 +1,28 @@
+[Unit]
+Description=Pi Radio audio server
+Wants=network-online.target
+After=network-online.target sound.target
+
+[Service]
+Type=simple
+User=piradio
+Group=piradio
+SupplementaryGroups=audio
+WorkingDirectory=/opt/piradio
+EnvironmentFile=/etc/piradio.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PATH=/opt/piradio/.venv/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/opt/piradio/.venv/bin/uvicorn app.main:create_app --factory --app-dir /opt/piradio/backend --host 0.0.0.0 --port 8000
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/piradio
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

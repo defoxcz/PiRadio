@@ -1,3 +1,5 @@
+import { rememberToken, restoreToken } from "./token-storage";
+
 export interface Station {
   id: string;
   name: string;
@@ -19,15 +21,19 @@ export interface Settings {
   autoplay: boolean;
   shutdown_available?: boolean;
 }
-let token = sessionStorage.getItem("piradio-token") || "";
+let token = restoreToken();
+export function hasToken() {
+  return Boolean(token);
+}
 export function setToken(value: string) {
-  token = value;
-  sessionStorage.setItem("piradio-token", value);
+  token = value.trim();
+  return rememberToken(token);
 }
 export async function api<T>(
   path: string,
   method = "GET",
   data?: unknown,
+  candidateToken = token,
 ): Promise<T> {
   const response = await fetch(`/api${path}`, {
     method,
@@ -36,7 +42,7 @@ export async function api<T>(
         data instanceof Blob
           ? data.type || "application/octet-stream"
           : "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(candidateToken ? { Authorization: `Bearer ${candidateToken}` } : {}),
     },
     body:
       data instanceof Blob
@@ -51,7 +57,9 @@ export async function api<T>(
     const body = await response.json().catch(() => ({}));
     throw new Error(
       response.status === 401
-        ? "Pro ovládání vložte token v Nastavení."
+        ? candidateToken
+          ? "Server tento token odmítl. V Nastavení zadejte token z Raspberry Pi."
+          : "Pro ovládání vložte token v Nastavení."
         : typeof body.detail === "string"
           ? body.detail
           : "Zkontrolujte vyplněné údaje a zkuste to znovu.",

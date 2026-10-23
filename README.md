@@ -82,7 +82,7 @@ Pokud už používáte PipeWire, zjistěte zařízení přes `wpctl status`, vý
 
 Telefon připojte ke stejné domácí Wi-Fi a otevřete `http://raspberrypi.local:8000`; pokud mDNS nefunguje, použijte `http://IP_ADRESA_PI:8000`. V Nastavení vložte token. Zvuk vydává Raspberry Pi přes DAC; telefon žádné audio nepřehrává.
 
-Službu provozujte pouze v důvěryhodné LAN. Nenastavujte port forwarding ani veřejný port. Bearer token je nutný pro všechny změny, nastavení a systémové metriky; zdravotní stav, stanice a stav přehrávače jsou čitelné bez tokenu. Každý držitel tokenu má plné ovládání, neexistují uživatelské role. Token se drží v `sessionStorage` do ukončení relace; XSS nebo nedůvěryhodný software v prohlížeči ho mohou získat. Externí obrázky se načítají přímo na telefonu, server jejich URL nestahuje. Vlastní obrázek vyberete v **Stanice → Přidat / Upravit → Obrázek ze souboru** a potvrdíte tlačítkem **Uložit**. Podporované jsou JPG, PNG a WebP do 5 MB a 16 megapixelů. Server obrázek ověří, zmenší na nejvýše 1024×1024 px a uloží jako JPEG bez původních metadat v `PIRADIO_DATA/images`. Průhlednost dostane tmavé pozadí; animace se převede na první snímek. Obrázky jsou stejně jako seznam stanic veřejně čitelné v LAN. Zálohujte celý datový adresář včetně obrázků. Odebrání obrázku ze stanice soubor automaticky nemaže, protože jej mohou používat jiné stanice; nepřiřazené soubory zatím zůstávají na disku. Ve vizuálním demu obrázek zůstane pouze v paměti prohlížeče.
+Službu provozujte pouze v důvěryhodné LAN. Nenastavujte port forwarding ani veřejný port. Bearer token je nutný pro všechny změny, nastavení a systémové metriky; zdravotní stav, stanice a stav přehrávače jsou čitelné bez tokenu. Každý držitel tokenu má plné ovládání, neexistují uživatelské role. Token se po úspěšném ověření uchovává v `localStorage` tohoto prohlížeče i po zavření webu. V Nastavení jej odstraníte tlačítkem **Zapomenout token v tomto zařízení** bez zastavení přehrávání. Existující token z `sessionStorage` se automaticky převede. Trvalé uložení platí pouze pro stejnou adresu serveru (protokol, host a port); anonymní režim nebo vymazání dat webu jej odstraní. Pokud prohlížeč trvalé ukládání zakazuje, aplikace na to při připojení upozorní a token použije jen v relaci; XSS nebo nedůvěryhodný software v prohlížeči ho mohou získat. Externí obrázky se načítají přímo na telefonu, server jejich URL nestahuje. Vlastní obrázek vyberete v **Stanice → Přidat / Upravit → Obrázek ze souboru** a potvrdíte tlačítkem **Uložit**. Podporované jsou JPG, PNG a WebP do 5 MB a 16 megapixelů. Server obrázek ověří, zmenší na nejvýše 1024×1024 px a uloží jako JPEG bez původních metadat v `PIRADIO_DATA/images`. Průhlednost dostane tmavé pozadí; animace se převede na první snímek. Obrázky jsou stejně jako seznam stanic veřejně čitelné v LAN. Zálohujte celý datový adresář včetně obrázků. Odebrání obrázku ze stanice soubor automaticky nemaže, protože jej mohou používat jiné stanice; nepřiřazené soubory zatím zůstávají na disku. Ve vizuálním demu obrázek zůstane pouze v paměti prohlížeče.
 
 HTTP v LAN nešifruje token ani provoz. Pro trvalé nasazení použijte HTTPS reverse proxy (např. Caddy) s doménou a certifikátem důvěryhodným pro Android, případně lokální CA, jejíž kořenový certifikát nainstalujete do telefonu. Pak backend přepněte na `127.0.0.1` a port zpřístupněte jen proxy. CORS není povolen; frontend a API mají stejný origin.
 
@@ -118,7 +118,8 @@ Neplatný vstup vrací 422, chybějící token 401, neznámá stanice 404. Stav 
 ```sh
 (cd backend && ../.venv/bin/pytest -q)
 npm --prefix frontend run build
-bash -n deploy/install.sh
+bash -n deploy/install.sh deploy/update-web.sh
+node --experimental-strip-types --test frontend/tests/token-storage.test.mjs
 ```
 
 Testy pokrývají odmítnutí nebezpečných URL, autentizaci, CRUD a perzistenci stanic, hlasitost, nastavení, nedostupné vypnutí, demo bez spouštění procesů, ukončení načítání a chování při chybě resolveru. Frontendová kontrola zahrnuje TypeScript a produkční build. Vizuální ověření v prohlížeči a na viewportu 360×800 nebylo v tomto prostředí dostupné; proveďte ho podle akceptačního postupu níže. `backend/requirements-lock.txt` zachycuje verze ověřené na vývojovém Macu; instalace na ARM používá přenositelné rozsahy z `requirements.txt` a správné wheel soubory pro platformu.
@@ -135,3 +136,18 @@ Doporučený akceptační postup: nastavte skutečnou stanici → spusťte audio
 `station-library/radio.sqlite` obsahuje konzistentní kopii aktuálních 6 stanic, oblíbených a poslední vybrané stanice. `station-library/images/` obsahuje jejich 6 nahraných obrázků. Token ani `.env.local` součástí nejsou. Živá databáze v `data/` zůstává mimo Git; další změny stanic se do verzované kopie nepřenesou automaticky.
 
 Pro první přenos na Mac zastavte backend a zkopírujte obsah `station-library/` do `data/`. Na Raspberry Pi po instalaci služby zastavte `piradio`, zkopírujte obsah `station-library/` do `/var/lib/piradio/`, nastavte vlastnictví na `piradio:piradio` a službu znovu spusťte. Kopírování přepíše stávající databázi; pokud už cílové zařízení obsahuje vlastní stanice, nejprve jeho data zazálohujte. Obrázky musí být ve složce `images/` vedle databáze. Token nastavte na každém zařízení zvlášť.
+
+## Aktualizace pouze webového rozhraní bez přerušení zvuku
+
+Na Macu z kořene projektu:
+
+```sh
+npm --prefix frontend run build
+bash deploy/update-web.sh defox@192.168.0.150
+```
+
+SSH a sudo mohou požádat o heslo. Skript aktualizuje pouze statické soubory
+v `/opt/piradio/frontend/dist`, nejprve assety a nakonec atomicky HTML. Staré
+hashované assety zachová pro již otevřené telefony. Nemění token, databázi ani
+systemd službu a nerestartuje přehrávání. Potom v telefonu obnovte stránku a
+jednou potvrďte token; další otevření stejné adresy už jej nevyžaduje.

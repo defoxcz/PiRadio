@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import { api, setToken, type Station, type Status, type Settings } from "./api";
+import {
+  api,
+  setToken,
+  hasToken,
+  type Station,
+  type Status,
+  type Settings,
+} from "./api";
 import NavIcon from "./components/NavIcon.vue";
 const tabs = [
   { id: "play", label: "Přehrávání" },
@@ -22,6 +29,7 @@ const status = ref<Status>({
   demo: false,
 });
 const feedback = ref("");
+const tokenSaved = ref(hasToken());
 const localDemo = ref(false),
   search = ref(""),
   onlyFavorites = ref(false),
@@ -311,10 +319,42 @@ async function loadSettings() {
   });
 }
 async function connect() {
-  setToken(tokenInput.value.trim());
+  const candidate = tokenInput.value.trim();
+  if (!candidate) {
+    error.value = "Nejprve vložte ovládací token Raspberry Pi.";
+    return;
+  }
+  await action(async () => {
+    // Validate before replacing a working remembered token.
+    const loaded = await api<Settings>(
+      "/settings",
+      "GET",
+      undefined,
+      candidate,
+    );
+    const remembered = setToken(candidate);
+    tokenSaved.value = true;
+    tokenInput.value = "";
+    localDemo.value = false;
+    settings.value = loaded;
+    feedback.value = remembered
+      ? "Připojeno. Token je zapamatovaný v tomto prohlížeči i po zavření webu."
+      : "Připojeno pouze pro tuto relaci. Prohlížeč nepovoluje trvalé ukládání tokenu.";
+    await refresh();
+  });
+}
+function forgetToken() {
+  const removed = setToken("");
+  tokenSaved.value = false;
   tokenInput.value = "";
-  await loadSettings();
-  await refresh();
+  metrics.value = null;
+  history.value = [];
+  error.value = removed
+    ? ""
+    : "Prohlížeč nepovolil úplné odstranění tokenu. Vymažte data tohoto webu v nastavení prohlížeče.";
+  feedback.value = removed
+    ? "Token byl odebrán z tohoto prohlížeče. Přehrávání pokračuje."
+    : "Token byl odebrán z paměti aplikace.";
 }
 async function saveSettings() {
   await action(async () => {
@@ -762,11 +802,24 @@ onUnmounted(() => clearInterval(timer));
                 autocomplete="off"
                 placeholder="Vložte token ze serveru"
             /></label>
-            <p class="muted">Uloží se jen pro tuto relaci prohlížeče.</p>
+            <p class="muted">
+              Token si tento prohlížeč zapamatuje i po zavření webu. Používejte
+              stále stejnou adresu serveru. V anonymním režimu nebo po vymazání
+              dat webu jej bude potřeba zadat znovu.
+            </p>
+            <p v-if="tokenSaved" class="muted">Ovládací token je nastavený.</p>
             <button class="primary" :disabled="busy">
               Připojit a načíst nastavení
             </button>
           </form>
+          <button
+            v-if="tokenSaved"
+            class="wide"
+            :disabled="busy"
+            @click="forgetToken"
+          >
+            Zapomenout token v tomto zařízení
+          </button>
         </article>
         <form class="panel" @submit.prevent="saveSettings">
           <h2>Přehrávání</h2>

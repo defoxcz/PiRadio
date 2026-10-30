@@ -26,6 +26,7 @@ class StationInput(BaseModel):
     url: str = Field(max_length=2048)
     image: str = Field(default='', max_length=2048)
     favorite: bool = False
+    live: bool = True
 
     @field_validator('name')
     @classmethod
@@ -63,3 +64,9 @@ class Settings(BaseModel):
     audio_device: str = Field(default='auto', min_length=1, max_length=200)
     auto_recover: bool = True
     autoplay: bool = False
+
+
+class YouTubePlay(BaseModel):
+    live: bool = False
+    video_id: str = Field(pattern=r'^[A-Za-z0-9_-]{11}$')
+    title: str = Field(default='Video YouTube', min_length=1, max_length=100)

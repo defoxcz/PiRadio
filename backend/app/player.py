@@ -10,7 +10,10 @@ log = logging.getLogger(__name__)
 
 
 class Player:
-    def __init__(self, demo, settings):
+    def __init__(self, demo, settings, on_started=None):
+        self.on_started = on_started
+        self.history_recorded = False
+        self.history_error = None
         self.demo = demo
         self.settings = settings
         self.process = None
@@ -24,7 +27,7 @@ class Player:
         self.lock = asyncio.Lock()
 
     def status(self):
-        return dict(state=self.state, station_id=self.station['id'] if self.station else None, volume=self.volume, error=self.error, demo=self.demo)
+        return dict(state=self.state, station_id=self.station['id'] if self.station else None, volume=self.volume, error=self.error, demo=self.demo, station=self.station, history_error=self.history_error)
 
     async def command(self, *args):
         reader, writer = await asyncio.wait_for(asyncio.open_unix_connection(self.socket), 3)
@@ -44,7 +47,7 @@ class Player:
     async def ensure_process(self):
         if self.process and self.process.returncode is None:
             return
-        self.process = await asyncio.create_subprocess_exec('mpv', '--idle=yes', '--no-video', '--no-terminal', '--network-timeout=15', '--cache-on-disk=no', '--demuxer-max-bytes=16777216', '--no-config', '--ytdl=no', '--input-terminal=no', '--input-default-bindings=no', '--load-scripts=no', f'--input-ipc-server={self.socket}', f'--audio-device={self.settings.audio_device}', stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+        self.process = await asyncio.create_subprocess_exec('mpv', '--idle=yes', '--keep-open=yes', '--no-video', '--no-terminal', '--network-timeout=15', '--cache-on-disk=no', '--demuxer-max-bytes=16777216', '--no-config', '--ytdl=no', '--input-terminal=no', '--input-default-bindings=no', '--load-scripts=no', f'--input-ipc-server={self.socket}', f'--audio-device={self.settings.audio_device}', stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
         for _ in range(50):
             try:
                 await self.command('get_property', 'idle-active')
@@ -102,10 +105,15 @@ class Player:
                     raise RuntimeError('Audio se nespustilo v časovém limitu')
                 self.state = 'playing'
                 self.error = None
+                self.record_started()
                 last_position = None
                 stale_seconds = 0
                 while True:
                     await asyncio.sleep(3)
+                    if not self.station.get('live', True) and await self.command('get_property', 'eof-reached'):
+                        await self.command('stop')
+                        self.state, self.error = 'stopped', None
+                        return
                     if await self.command('get_property', 'idle-active'):
                         raise RuntimeError('Stream skončil')
                     position = await self.command('get_property', 'time-pos')
@@ -138,11 +146,24 @@ class Player:
                 await self.shutdown_process()
         self.state, self.error = 'stopped', None
 
+    def record_started(self):
+        if self.history_recorded or self.on_started is None:
+            return
+        self.history_recorded = True
+        try:
+            self.on_started(self.station, self.demo)
+        except Exception:
+            self.history_error = 'Zvuk se spustil, ale historii se nepodařilo uložit.'
+            log.warning('Historii přehrávání se nepodařilo uložit.')
+
     async def play(self, station):
         await self.stop()
         self.station = station
+        self.history_recorded = False
+        self.history_error = None
         if self.demo:
             self.state = 'playing'
+            self.record_started()
         else:
             self.state = 'loading'
             self.task = asyncio.create_task(self.run())

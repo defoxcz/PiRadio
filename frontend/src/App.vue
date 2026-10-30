@@ -8,10 +8,12 @@ import {
   type Status,
   type Settings,
 } from "./api";
+import YouTubeTab from "./components/YouTubeTab.vue";
 import NavIcon from "./components/NavIcon.vue";
 const tabs = [
   { id: "play", label: "Přehrávání" },
   { id: "stations", label: "Stanice" },
+  { id: "youtube", label: "YouTube" },
   { id: "system", label: "Systém" },
   { id: "settings", label: "Nastavení" },
 ];
@@ -39,7 +41,7 @@ const localDemo = ref(false),
 const imageFile = ref<File | null>(null);
 const imagePreview = ref("");
 const imageInputKey = ref(0);
-const form = ref({ name: "", url: "", image: "", favorite: false });
+const form = ref({ name: "", url: "", image: "", favorite: false, live: true });
 const settings = ref<Settings>({
   default_volume: 45,
   audio_device: "auto",
@@ -65,11 +67,15 @@ const demoStations: Station[] = [
   { id: "demo-2", name: "Klidné ráno", url: "", image: "", favorite: false },
   { id: "demo-3", name: "Jazzový pokoj", url: "", image: "", favorite: true },
 ];
-const current = computed(
-  () =>
-    stations.value.find((s) => s.id === status.value.station_id) ||
-    stations.value[0],
-);
+const current = computed(() => {
+  const saved = stations.value.find((s) => s.id === status.value.station_id);
+  if (
+    saved &&
+    (!status.value.station || saved.url === status.value.station.url)
+  )
+    return saved;
+  return status.value.station || saved || stations.value[0];
+});
 const visibleStations = computed(() =>
   stations.value.filter(
     (s) =>
@@ -82,7 +88,11 @@ const visibleStations = computed(() =>
 const stateLabel = computed(
   () =>
     ({
-      playing: status.value.demo ? "DEMO • BEZ ZVUKU" : "ŽIVĚ",
+      playing: status.value.demo
+        ? "DEMO • BEZ ZVUKU"
+        : current.value?.live === false
+          ? "PŘEHRÁVÁ SE"
+          : "ŽIVĚ",
       stopped: "ZASTAVENO",
       loading: "NAČÍTÁNÍ",
       error: "CHYBA",
@@ -189,6 +199,16 @@ async function play(station = current.value) {
     if (localDemo.value) {
       status.value.station_id = station.id;
       status.value.state = "playing";
+    } else if (
+      station.id.startsWith("youtube:") ||
+      station.id.startsWith("history:")
+    ) {
+      const videoId = new URL(station.url).searchParams.get("v");
+      status.value = await api<Status>("/youtube/play", "POST", {
+        video_id: videoId,
+        title: station.name,
+        live: station.live ?? true,
+      });
     } else
       status.value = await api<Status>("/player/play", "POST", {
         station_id: station.id,
@@ -206,7 +226,12 @@ async function toggle() {
 async function next(direction: number) {
   const i = stations.value.findIndex((s) => s.id === current.value?.id);
   const n = stations.value.length;
-  if (n) await play(stations.value[(i + direction + n) % n]);
+  if (n)
+    await play(
+      stations.value[
+        i < 0 ? (direction > 0 ? 0 : n - 1) : (i + direction + n) % n
+      ],
+    );
 }
 async function volume(event: Event) {
   const value = Number((event.target as HTMLInputElement).value);
@@ -257,8 +282,9 @@ function openEditor(station?: Station) {
         url: station.url,
         image: station.image,
         favorite: station.favorite,
+        live: station.live ?? true,
       }
-    : { name: "", url: "", image: "", favorite: false };
+    : { name: "", url: "", image: "", favorite: false, live: true };
   editing.value = true;
 }
 async function saveStation() {
@@ -471,13 +497,15 @@ onUnmounted(() => clearInterval(timer));
             <p>
               {{
                 current
-                  ? "YouTube Live · pouze zvuk"
+                  ? current.live === false
+                    ? "YouTube · pouze zvuk"
+                    : "YouTube Live · pouze zvuk"
                   : "Přidejte první YouTube Live stanici"
               }}
             </p>
           </div>
           <button
-            v-if="current"
+            v-if="current && stations.some((s) => s.id === current?.id)"
             class="heart"
             :aria-label="
               current.favorite ? 'Odebrat z oblíbených' : 'Přidat do oblíbených'
@@ -490,6 +518,9 @@ onUnmounted(() => clearInterval(timer));
         </div>
         <p v-if="status.error" class="notice error" role="alert">
           {{ status.error }}
+        </p>
+        <p v-if="status.history_error" class="notice error" role="alert">
+          {{ status.history_error }}
         </p>
         <div class="transport">
           <button
@@ -616,6 +647,10 @@ onUnmounted(() => clearInterval(timer));
             ><input v-model="form.favorite" type="checkbox" />Oblíbená
             stanice</label
           >
+          <label class="check"
+            ><input v-model="form.live" type="checkbox" />Živé vysílání · při
+            výpadku obnovovat</label
+          >
           <div class="row">
             <button class="primary" :disabled="busy">Uložit</button
             ><button type="button" @click="editing = false">Zrušit</button>
@@ -684,6 +719,18 @@ onUnmounted(() => clearInterval(timer));
           <p>Přidejte přímý HTTPS odkaz na skutečné YouTube vysílání.</p>
         </div>
       </section>
+      <YouTubeTab
+        v-else-if="tab === 'youtube'"
+        :disabled="busy || localDemo"
+        :demo="localDemo"
+        @playing="
+          (value) => {
+            status = value;
+            tab = 'play';
+          }
+        "
+        @saved="refresh"
+      />
       <section v-else-if="tab === 'system'">
         <div class="heading">
           <div>

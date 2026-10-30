@@ -4,15 +4,16 @@ import hmac
 import os
 import re
 from pathlib import Path
-from fastapi import FastAPI, Depends, Header, HTTPException, Request
+from fastapi import FastAPI, Depends, Header, HTTPException, Request, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from starlette.concurrency import run_in_threadpool
 from .images import MAX_UPLOAD_BYTES, save_image
-from .models import StationInput, Volume, Play, Settings
+from .models import StationInput, Volume, Play, Settings, YouTubePlay
 from .store import Store
 from .player import Player
 from .metrics import Metrics
+from .youtube import YouTubeSearch
 
 
 def create_app(data_dir=None, demo=None):
@@ -27,7 +28,8 @@ def create_app(data_dir=None, demo=None):
     store = Store(data / 'radio.sqlite')
     settings = Settings(**store.get('settings', {}))
     settings.audio_device = os.getenv('PIRADIO_AUDIO_DEVICE', settings.audio_device)
-    player = Player(demo, settings)
+    player = Player(demo, settings, on_started=store.record_play)
+    youtube = YouTubeSearch(os.getenv('PIRADIO_YOUTUBE_API_KEY', '').strip())
     metrics = Metrics()
 
     @asynccontextmanager
@@ -112,6 +114,42 @@ def create_app(data_dir=None, demo=None):
         async with player.lock:
             await player.play(station)
             store.set('last_station', station['id'])
+        return player.status()
+
+    @app.get('/api/youtube/config', dependencies=write)
+    async def youtube_config():
+        return {'configured': bool(youtube.key)}
+
+    @app.get('/api/youtube/search', dependencies=write)
+    async def youtube_search(q: str = Query(min_length=1, max_length=200), live: bool = False,
+                             page: str = Query(default='', max_length=256, pattern=r'^[A-Za-z0-9_=-]*$')):
+        return await youtube.search(q, live, page)
+
+    @app.post('/api/youtube/play', dependencies=write)
+    async def youtube_play(value: YouTubePlay):
+        video = value.video_id
+        station = {'id': f'youtube:{video}', 'name': value.title.strip() or 'Video YouTube',
+                   'url': f'https://www.youtube.com/watch?v={video}',
+                   'image': f'https://i.ytimg.com/vi/{video}/hqdefault.jpg', 'favorite': False, 'live': value.live}
+        async with player.lock:
+            await player.play(station)
+        return player.status()
+
+    @app.get('/api/history', dependencies=write)
+    async def play_history():
+        return store.history()
+
+    @app.post('/api/history/{id}/play', dependencies=write)
+    async def replay_history(id: int):
+        entry = store.history_entry(id)
+        if not entry:
+            raise HTTPException(404, 'Záznam historie neexistuje.')
+        # Validate persisted data too; never send an arbitrary source to the resolver.
+        source = StationInput(name=entry['name'], url=entry['url'], image=entry['image'], live=bool(entry['live']))
+        saved = store.station(entry['station_id'])
+        station = source.model_dump() | {'id': entry['station_id'] if saved and saved['url'] == source.url else f"history:{entry['id']}"}
+        async with player.lock:
+            await player.play(station)
         return player.status()
 
     @app.post('/api/player/stop', dependencies=write)

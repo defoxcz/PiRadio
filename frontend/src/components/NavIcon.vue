@@ -18,6 +18,10 @@ defineProps<{ name: string }>();
       <path d="m6 7 12-4M13 11h4m-4 4h4" />
       <circle cx="8.5" cy="14" r="2" />
     </template>
+    <template v-else-if="name === 'youtube'">
+      <rect x="2" y="5" width="20" height="14" rx="4" />
+      <path d="m10 9 6 3-6 3z" fill="currentColor" stroke="none" />
+    </template>
     <template v-else-if="name === 'system'">
       <path d="M3 16h4l3-9 4 13 3-8h4" />
     </template>

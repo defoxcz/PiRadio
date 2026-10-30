@@ -26,18 +26,34 @@ Otevřete **http://127.0.0.1:8000**. Při backendu s `PIRADIO_DEMO=1` lze otevř
 
 Backendový demo režim (`PIRADIO_DEMO=1`) ukládá skutečná data do SQLite, ale jen simuluje stav přehrávače. Každý takový stav nese `demo: true`. Nikdy neoznačuje simulaci za skutečné vysílání. Při `PIRADIO_DEMO=0` se parametr `?demo=1` ignoruje a odstraní z adresy, aby se omylem nespustila dočasná ukázka. Pro skutečný režim nastavte `PIRADIO_DEMO=0`, nainstalujte `mpv` (na Macu např. `brew install mpv`) a restartujte backend. macOS ukazuje své systémové metriky, nikoli metriky Raspberry Pi; teplota, Wi-Fi a throttling mohou být nedostupné.
 
-Pro vývoj spusťte backend podle výše uvedeného příkazu a ve druhém terminálu `npm --prefix frontend run dev`. Vite poskytne adresu a proxy `/api` na port 8000. Frontend nemá tajemství v bundlu a nevyžaduje CORS. Backend spouštějte jen v jednom workeru: stav mpv, zámky a historie jsou záměrně v paměti jednoho procesu.
+Pro vývoj spusťte backend podle výše uvedeného příkazu a ve druhém terminálu `npm --prefix frontend run dev`. Vite poskytne adresu a proxy `/api` na port 8000. Frontend nemá tajemství v bundlu a nevyžaduje CORS. Backend spouštějte jen v jednom workeru: stav mpv, zámky a teplotní historie jsou záměrně v paměti jednoho procesu. Historie přehrávání je trvale v SQLite.
 
 ## Co je implementované
 
-- Čtyři mobilní obrazovky: přehrávání, správa stanic, systém, nastavení. Vyhledávání, oblíbené, potvrzení smazání, nahrání obrázku ze souboru i zadání HTTPS adresy, hlasitost a předchozí/další stanice.
-- SQLite v `PIRADIO_DATA`, nezávisle na zdrojovém kódu. Zapisují se jen změny stanic, nastavení a poslední stanice; nikoli každá metrika nebo změna hlasitosti.
+- Pět mobilních obrazovek: přehrávání, správa stanic, YouTube s historií, systém, nastavení. Vyhledávání, oblíbené, potvrzení smazání, nahrání obrázku ze souboru i zadání HTTPS adresy, hlasitost a předchozí/další stanice.
+- SQLite v `PIRADIO_DATA`, nezávisle na zdrojovém kódu. Zapisují se změny stanic, nastavení, poslední stanice a spuštěná přehrávání; nikoli každá metrika nebo změna hlasitosti.
 - Dlouhodobý mpv proces s privátním Unix IPC socketem. yt-dlp získává vždy aktuální audio URL, nestahuje soubory. Povoleny jsou jen normalizované přímé YouTube HTTPS URL; resolver smí předat mpv jen HTTPS adresu na doméně `googlevideo.com`. Nepodporujeme playlisty, obecné weby ani odkazy na lokální soubory.
 - Resolver má limit 40 s, IPC 3 s, síť mpv 15 s. Maximálně 4 pokusy na jeden požadavek přehrát, s prodlevou 2/4/8 s. Po vyčerpání pokusů zůstane srozumitelná chyba; nový pokus spustí uživatel. Stav přehrávání se potvrzuje dostupným audio výstupem mpv. Podepsané stream URL ani tokeny se nelogují.
 - CPU, RAM, disk, uptime a IP přes psutil; dostupné linuxové teplotní a Wi-Fi údaje, throttling přes `vcgencmd`. Teplotní historie se sbírá po 5 s do paměti (nejvýše 720 bodů). UI ji načítá na systémové záložce. Disk je systémový filesystém, na Pi zpravidla microSD. Wi-Fi je syrová Linux link quality, nikoli smyšlené procento signálu.
 - Příkon se nezobrazuje jako změřený. `PowerMeter.watts()` je připravený kontrakt pro externí měřič; zatím vrací `None`.
 - Výchozí hlasitost se používá po startu služby / restartu přehrávače. Volitelný autostart poslední stanice platí při startu backendu.
 - Restart přehrávače ukončuje a znovu zakládá mpv, nikoli systemd či OS. Vypnutí OS je vědomě nedostupné (API 501); služba nemá sudo ani práva k vypnutí.
+
+## YouTube a automatická historie
+
+`PIRADIO_TOKEN` slouží k autorizaci ovládání rádia. Pro vyhledávání potřebujete navíc vlastní klíč: v Google Cloud projektu povolte **YouTube Data API v3**, vytvořte API klíč a omezte jej na toto API. Nastavte jej na backendu, pro místní vývoj v `.env.local`, na Raspberry Pi v `/etc/piradio.env`:
+
+```dotenv
+PIRADIO_YOUTUBE_API_KEY=vas_klic
+```
+
+Klíč neposílejte do chatu ani do Gitu a nepoužívejte proměnnou `VITE_*`. Po změně restartujte backend; na Pi `sudo systemctl restart piradio` (přeruší právě přehrávaný zvuk). Stávající `PIRADIO_TOKEN` ponechte. Bez YouTube klíče fungují uložené stanice i historie, vyhledávání ukáže pokyn k nastavení. Podrobnosti API: [oficiální search.list](https://developers.google.com/youtube/data/reference/rest/v3/search/list). Kvótu sledujte ve svém Google Cloud projektu.
+
+Záložka YouTube hledá až po potvrzení tlačítkem, nabízí filtr živých vysílání a další stránku výsledků. Backend cachuje shodné dotazy na 120 sekund (nejvýše 64 dotazů/stránek). Data API slouží pro hledání; přehrávání používá stávající yt-dlp a mpv na Raspberry Pi. Telefon zůstává dálkovým ovladačem. Výsledek se přidá do knihovny pouze tlačítkem **Uložit stanici**. U konečných nahrávek přehrávání po konci skončí; u živých stanic zůstává obnova spojení. Typ lze nastavit i v editoru stanice.
+
+Každé úspěšně spuštěné přehrávání se automaticky zapisuje do SQLite: stanice, výsledek hledání, opakování z historie i autostart. Pouhé kliknutí nebo selhání načítání se nezapisuje. Automatické obnovení stejného přehrávání nevytváří duplicity. Uchovává se posledních 500 záznamů, rozhraní zobrazuje posledních 100 s časem a možností znovu přehrát. Ukládá se původní YouTube odkaz, nikoli dočasná podepsaná audio URL. Demo záznamy jsou označeny jako simulace bez zvuku. Historie přežije restart aplikace; databáze stanic se rozšiřuje bez mazání původních dat.
+
+Tato změna zahrnuje backend i databázi: samotný `deploy/update-web.sh` nestačí. Použijte úplné nasazení podle následujícího postupu a zachovejte stávající `/var/lib/piradio` i `/etc/piradio.env`.
 
 ## Raspberry Pi: nasazení přes SSH
 
@@ -98,13 +114,18 @@ Interaktivní schéma a všechny modely jsou v `/docs`, OpenAPI v `/openapi.json
 | POST `/api/images` | binární tělo obrázku, vrací `{url}`; 201, limit 5 MB | ano |
 | GET `/media/{filename}` | ověřený nahraný JPEG; chybějící obrázek 404 | ne |
 | GET `/api/stations` | seznam stanic | ne |
-| POST `/api/stations` | `{name, url, image?, favorite?}`; 201 | ano |
+| POST `/api/stations` | `{name, url, image?, favorite?, live?}`; 201 | ano |
 | PATCH `/api/stations/{id}` | kompletní editovatelná pole jako POST | ano |
 | DELETE `/api/stations/{id}` | odstraní stanici, aktivní zastaví | ano |
 | POST `/api/player/play` | `{station_id}`; asynchronní načítání | ano |
 | POST `/api/player/stop` | zastavení | ano |
 | POST `/api/player/volume` | `{volume: 0..100}` celé číslo | ano |
 | GET `/api/player/status` | `{state, station_id, volume, error, demo}` | ne |
+| GET `/api/youtube/config` | dostupnost konfigurace klíče, bez klíče samotného | ano |
+| GET `/api/youtube/search` | parametry `q`, `live?`, `page?` | ano |
+| POST `/api/youtube/play` | `{video_id, title, live?}` | ano |
+| GET `/api/history` | posledních 100 spuštění | ano |
+| POST `/api/history/{id}/play` | znovu přehrát záznam | ano |
 | GET `/api/system/status` | systémové údaje, nedostupné položky null | ano |
 | GET `/api/system/temperature-history` | pole `{time: Unix sekundy, temperature: °C nebo null}` | ano |
 | GET, PATCH `/api/settings` | `{default_volume, audio_device, auto_recover, autoplay}` | ano |
@@ -122,7 +143,7 @@ bash -n deploy/install.sh deploy/update-web.sh
 node --experimental-strip-types --test frontend/tests/token-storage.test.mjs
 ```
 
-Testy pokrývají odmítnutí nebezpečných URL, autentizaci, CRUD a perzistenci stanic, hlasitost, nastavení, nedostupné vypnutí, demo bez spouštění procesů, ukončení načítání a chování při chybě resolveru. Frontendová kontrola zahrnuje TypeScript a produkční build. Vizuální ověření v prohlížeči a na viewportu 360×800 nebylo v tomto prostředí dostupné; proveďte ho podle akceptačního postupu níže. `backend/requirements-lock.txt` zachycuje verze ověřené na vývojovém Macu; instalace na ARM používá přenositelné rozsahy z `requirements.txt` a správné wheel soubory pro platformu.
+Testy pokrývají odmítnutí nebezpečných URL, autentizaci, CRUD a perzistenci stanic, hlasitost, nastavení, nedostupné vypnutí, demo bez spouštění procesů, ukončení načítání a chování při chybě resolveru. Frontendová kontrola zahrnuje TypeScript a produkční build. Nová záložka byla ověřena v headless Chromium na viewportu 360×800 s testovací odpovědí YouTube a demo backendem: hledání, přehrání, automatická historie, opakování a uložení stanice, bez vodorovného přetékání či JavaScript chyb. Nejde o ověření živého YouTube API ani zvuku. Backend má 46 úspěšných testů včetně migrace SQLite, historie a chyb API. `backend/requirements-lock.txt` zachycuje verze ověřené na vývojovém Macu; instalace na ARM používá přenositelné rozsahy z `requirements.txt` a správné wheel soubory pro platformu.
 
 Na vývojovém Macu je ověřeno skutečné spuštění mpv, Unix IPC, dekódování a postup přehrávání přes CoreAudio pomocí tichého testovacího WAV při hlasitosti 0; také zastavení a ukončení procesu. Tento test nepotvrzuje konkrétní YouTube vysílání ani slyšitelný zvuk.
 

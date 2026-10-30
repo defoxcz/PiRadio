@@ -304,7 +304,7 @@ nav {
   background: #101b20f5;
   border-top: 1px solid #29363b;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   z-index: 10;
   backdrop-filter: blur(18px);
 }
@@ -583,4 +583,52 @@ nav button span {
 }
 input[type="file"] {
   font-size: 0.8rem;
+}
+
+.youtube-search {
+  display: grid;
+  gap: 12px;
+  margin: 24px 0;
+}
+.youtube-check {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.youtube-check input {
+  width: 20px;
+  height: 20px;
+}
+.youtube-result {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 12px;
+  padding: 16px 0;
+  border-bottom: 1px solid #29363b;
+}
+.youtube-result img {
+  width: 96px;
+  aspect-ratio: 4/3;
+  object-fit: cover;
+  border-radius: 8px;
+}
+.youtube-result a {
+  color: var(--green);
+  overflow-wrap: anywhere;
+}
+.youtube-result p {
+  margin: 8px 0;
+}
+.youtube-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.youtube-actions button,
+.history-result button {
+  padding: 10px;
+  min-height: 44px;
+}
+.history-result {
+  grid-template-columns: minmax(0, 1fr);
 }

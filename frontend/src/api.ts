@@ -6,6 +6,7 @@ export interface Station {
   url: string;
   image: string;
   favorite: boolean;
+  live?: boolean;
 }
 export interface Status {
   state: string;
@@ -13,6 +14,8 @@ export interface Status {
   volume: number;
   error: string | null;
   demo: boolean;
+  station?: Station | null;
+  history_error?: string | null;
 }
 export interface Settings {
   default_volume: number;

@@ -1,12 +1,17 @@
 import asyncio
 import json
 import logging
+import os
 import sys
 import tempfile
 from pathlib import Path
 from urllib.parse import urlparse
 
 log = logging.getLogger(__name__)
+
+
+class SourceError(RuntimeError):
+    """Safe source error that needs user action rather than automatic retry."""
 
 
 class Player:
@@ -57,7 +62,14 @@ class Player:
         raise RuntimeError('mpv IPC není dostupné')
 
     async def resolve(self, url):
-        proc = await asyncio.create_subprocess_exec(sys.executable, '-m', 'yt_dlp', '--ignore-config', '--js-runtimes', 'node', '--no-playlist', '--no-warnings', '--socket-timeout', '15', '--retries', '1', '-f', 'bestaudio/best', '--get-url', '--', url, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        cookie_args = []
+        cookie_file = os.getenv('PIRADIO_YOUTUBE_COOKIES', '').strip()
+        if cookie_file:
+            path = Path(cookie_file)
+            if not path.is_absolute() or not path.is_file() or not os.access(path, os.R_OK | os.W_OK):
+                raise SourceError('Soubor YouTube cookies chybí nebo jej služba nemůže číst a zapisovat.')
+            cookie_args = ['--cookies', str(path)]
+        proc = await asyncio.create_subprocess_exec(sys.executable, '-m', 'yt_dlp', '--ignore-config', '--no-plugin-dirs', *cookie_args, '--js-runtimes', 'node', '--no-playlist', '--no-warnings', '--socket-timeout', '15', '--retries', '1', '-f', 'bestaudio/best', '--get-url', '--', url, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         try:
             out, err = await asyncio.wait_for(proc.communicate(), 40)
         except BaseException:
@@ -74,6 +86,8 @@ class Player:
                     reason = label
                     break
             log.warning('yt-dlp: exit=%s, příčina=%s', proc.returncode, reason)
+            if 'sign in' in detail:
+                raise SourceError('YouTube vyžaduje přihlášení nebo ověření. Nastavte PIRADIO_YOUTUBE_COOKIES na serveru, případně obnovte cookies.')
             raise RuntimeError(f'yt-dlp skončil s kódem {proc.returncode}')
         streams = out.decode().strip().splitlines()
         if len(streams) != 1:
@@ -127,8 +141,8 @@ class Player:
                 log.warning('Přehrávání selhalo: %s', type(exc).__name__)
                 await self.shutdown_process()
                 attempts += 1
-                self.error = 'Stream nelze přehrát. Může být ukončený, blokovaný nebo dočasně nedostupný.'
-                if not self.settings.auto_recover or attempts >= 4:
+                self.error = str(exc) if isinstance(exc, SourceError) else 'Stream nelze přehrát. Může být ukončený, blokovaný nebo dočasně nedostupný.'
+                if isinstance(exc, SourceError) or not self.settings.auto_recover or attempts >= 4:
                     self.state = 'error'
                     return
                 self.state = 'loading'

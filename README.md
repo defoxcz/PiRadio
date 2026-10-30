@@ -172,3 +172,28 @@ v `/opt/piradio/frontend/dist`, nejprve assety a nakonec atomicky HTML. Staré
 hashované assety zachová pro již otevřené telefony. Nemění token, databázi ani
 systemd službu a nerestartuje přehrávání. Potom v telefonu obnovte stránku a
 jednou potvrďte token; další otevření stejné adresy už jej nevyžaduje.
+
+## YouTube požaduje přihlášení / ověření robota
+
+Backend podporuje volitelný `PIRADIO_YOUTUBE_COOKIES`: absolutní cestu k souboru cookies ve formátu Netscape. API klíč pro vyhledávání jej nenahrazuje. Při požadavku na přihlášení se zobrazí konkrétní zpráva a automatické opakování skončí, aby se neposílaly další stejné požadavky. Obsah cookies ani nezpracovaný výstup yt-dlp se nevrací do UI/logu. Pluginy yt-dlp se nenačítají, takže test nezávisí na přístupu do domovského adresáře.
+
+Cookies exportujte z vlastní přihlášené relace pouze pro YouTube podle [oficiálního návodu yt-dlp](https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies): nové soukromé okno, přihlášení k YouTube, v téže záložce otevřít `https://www.youtube.com/robots.txt`, exportovat cookies YouTube do Netscape souboru a soukromé okno zavřít. Dokumentace upozorňuje i na riziko omezení účtu; používejte pouze podle potřeby. Přihlášení nemusí odstranit všechna omezení YouTube. Soubor neposílejte do chatu a neukládejte do repozitáře.
+
+Příklad přenosu z Macu (předpokládá export `~/Downloads/youtube-cookies.txt`):
+
+```sh
+chmod 600 ~/Downloads/youtube-cookies.txt
+scp ~/Downloads/youtube-cookies.txt defox@192.168.0.150:~/youtube-cookies.txt
+ssh defox@192.168.0.150
+sudo install -o piradio -g piradio -m 600 ~/youtube-cookies.txt /var/lib/piradio/youtube-cookies.txt
+rm ~/youtube-cookies.txt
+sudo nano /etc/piradio.env
+```
+
+Do existujícího env souboru přidejte (ostatní hodnoty ponechte):
+
+```dotenv
+PIRADIO_YOUTUBE_COOKIES=/var/lib/piradio/youtube-cookies.txt
+```
+
+Soubor je v datovém adresáři, protože yt-dlp cookies také zapisuje a služba má domovské adresáře uzavřené. Po nasazení upraveného backendu spusťte `sudo systemctl restart piradio`. Pokud cookies přestanou platit, nahraďte je novým exportem. Nezobrazujte jejich obsah příkazem `cat` do sdílených výpisů. Na Macu lze stejnou proměnnou nastavit v `.env.local` s místní absolutní cestou; soubor se na Pi automaticky nepřenáší.

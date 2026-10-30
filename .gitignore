@@ -11,3 +11,6 @@ data/
 
 # Verzovaná kopie knihovny stanic; živá databáze v data/ zůstává lokální.
 !station-library/radio.sqlite
+
+# Přihlašovací cookies nikdy nepatří do repozitáře.
+*cookies*.txt
